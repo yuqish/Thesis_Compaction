@@ -34,18 +34,19 @@ yield_low = 0.1;
 yield_high = 1.3;
 
 % assume a uniform prior on parameters, generate prior
-sample_size = 10000;
-randm = rand(sample_size,3);
-randm(:,1) = randm(:,1)*(yield_high-yield_low) + yield_low;
-randm(:,2) = randm(:,2)*(E1_high-E1_low) + E1_low;
-randm(:,3) = randm(:,3)*(E2_high-E2_low) + E2_low;
-theta_prior = [];
-for i = 1:sample_size
-    if randm(i,2) > randm(i,3)
-        theta_prior = [theta_prior;randm(i,:)];
-    end
-end
-disp(length(theta_prior))
+load('prior_samples.mat')
+%sample_size = 10000;
+%randm = rand(sample_size,3);
+%randm(:,1) = randm(:,1)*(yield_high-yield_low) + yield_low;
+%randm(:,2) = randm(:,2)*(E1_high-E1_low) + E1_low;
+%randm(:,3) = randm(:,3)*(E2_high-E2_low) + E2_low;
+%theta_prior = [];
+%for i = 1:sample_size
+%    if randm(i,2) > randm(i,3)
+%        theta_prior = [theta_prior;randm(i,:)];
+%    end
+%end
+%disp(length(theta_prior))
 
 figure;
 subplot(3,1,1);
@@ -91,7 +92,6 @@ epsilon_array = 0:0.1:1;
 response_array = zeros(11,n_trials);
 entropy_array = zeros(11,n_trials);
 for jj = 1:length(epsilon_array)
-%for jj = 2
     epsilon = epsilon_array(jj);
     expected_depths_by_actions = inf*ones(2,length(actions_array));
     depths_by_actions = zeros(2,length(actions_array));
@@ -99,7 +99,7 @@ for jj = 1:length(epsilon_array)
     theta_prior1 = theta_prior;
     for ii = 1:n_trials
         expected_depths_by_actions = update_expected_depths_by_actions(theta_prior1, actions_array, expected_depths_by_actions, forward_NN);
-        action = eGreedy(ii, n_trials, epsilon, theta_prior1, actions_array, expected_depths_by_actions, depths_by_actions, forward_NN, d_target);
+        action = eGreedy_explore_first(ii, n_trials, epsilon, theta_prior1, actions_array, expected_depths_by_actions, depths_by_actions, forward_NN, d_target);
         response = comsol_response(comsol_model, action);
         fprintf('response: %4.4f\n',response)
         response_array(jj,ii) = response(2);
@@ -109,52 +109,91 @@ for jj = 1:length(epsilon_array)
         depths_by_actions = update_depths_by_actions(actions_array, action, response, depths_by_actions);
     end
 
-% plots
-figure;
-subplot(3,1,1);
-hist(theta_posterior(:,1),yield_low+0.05:0.1:yield_high-0.05);
-%xlim([yield_low yield_high])
-ylabel('\sigma_{yield}')
-subplot(3,1,2);
-hist(theta_posterior(:,2),E1_low+0.1:0.2:E1_high-0.1);
-%xlim([E1_low E1_high])
-ylabel('E_e')
-subplot(3,1,3);
-hist(theta_posterior(:,3),E2_low+0.1:0.2:E2_high-0.1);
-%xlim([E2_low E2_high])
-ylabel('E_{Tiso}')
 end
 
 %
-depthmse = zeros(1,size(response_array,1));
-variance = zeros(1,size(response_array,1));
+depthmse1 = zeros(1,size(response_array,1));
+variance1 = zeros(1,size(response_array,1));
 for i = 1:size(response_array,1)
-    depthmse(i) = sum(abs(response_array(i,:)-d_target));
-    variance(i) = sum(entropy_array(i,:));
-    fprintf('total reward: %4.8f\n',depthmse(i))
+    depthmse1(i) = sum(abs(response_array(i,:)-d_target));
+    variance1(i) = entropy_array(i,end);
+    fprintf('total reward: %4.8f\n',depthmse1(i))
 end
+
+for jj = 1:length(epsilon_array)
+    epsilon = epsilon_array(jj);
+    expected_depths_by_actions = inf*ones(2,length(actions_array));
+    depths_by_actions = zeros(2,length(actions_array));
+    explored_actions = [];
+    theta_prior1 = theta_prior;
+    for ii = 1:n_trials
+        expected_depths_by_actions = update_expected_depths_by_actions(theta_prior1, actions_array, expected_depths_by_actions, forward_NN);
+        action = eGreedy_exploit_first(ii, n_trials, epsilon, theta_prior1, actions_array, expected_depths_by_actions, depths_by_actions, forward_NN, d_target);
+        response = comsol_response(comsol_model, action);
+        fprintf('response: %4.4f\n',response)
+        response_array(jj,ii) = response(2);
+        theta_posterior = updateTheta(action, response, theta_prior1, forward_NN);
+        entropy_array(jj,ii) = entropy_calculation(theta_posterior);
+        theta_prior1 = theta_posterior;
+        depths_by_actions = update_depths_by_actions(actions_array, action, response, depths_by_actions);
+    end
+
+end
+
 %
+depthmse2 = zeros(1,size(response_array,1));
+variance2 = zeros(1,size(response_array,1));
+for i = 1:size(response_array,1)
+    depthmse2(i) = sum(abs(response_array(i,:)-d_target));
+    variance2(i) = entropy_array(i,end);
+    fprintf('total reward: %4.8f\n',depthmse2(i))
+end
+
+for jj = 1:length(epsilon_array)
+    epsilon = epsilon_array(jj);
+    expected_depths_by_actions = inf*ones(2,length(actions_array));
+    depths_by_actions = zeros(2,length(actions_array));
+    explored_actions = [];
+    theta_prior1 = theta_prior;
+    for ii = 1:n_trials
+        expected_depths_by_actions = update_expected_depths_by_actions(theta_prior1, actions_array, expected_depths_by_actions, forward_NN);
+        action = eGreedy_random(ii, n_trials, epsilon, theta_prior1, actions_array, expected_depths_by_actions, depths_by_actions, forward_NN, d_target);
+        response = comsol_response(comsol_model, action);
+        fprintf('response: %4.4f\n',response)
+        response_array(jj,ii) = response(2);
+        theta_posterior = updateTheta(action, response, theta_prior1, forward_NN);
+        entropy_array(jj,ii) = entropy_calculation(theta_posterior);
+        theta_prior1 = theta_posterior;
+        depths_by_actions = update_depths_by_actions(actions_array, action, response, depths_by_actions);
+    end
+
+end
+
+%
+depthmse3 = zeros(1,size(response_array,1));
+variance3 = zeros(1,size(response_array,1));
+for i = 1:size(response_array,1)
+    depthmse3(i) = sum(abs(response_array(i,:)-d_target));
+    variance3(i) = entropy_array(i,end);
+    fprintf('total reward: %4.8f\n',depthmse3(i))
+end
+
+
+%%
 figure;
 hold on
-for ii = 1:length(depthmse)
-    x = depthmse(ii);
-    y = variance(ii);
-    scatter(x,y,'filled','DisplayName',['\epsilon=',num2str(epsilon_array(ii))])
-end
-legend
+%for ii = 1:length(depthmse)
+%    x = depthmse(ii);
+%    y = variance(ii);
+%    scatter(x,y,'filled','DisplayName',['\epsilon=',num2str(epsilon_array(ii))])
+%end
+plot(depthmse1,variance1,'-o')
+plot(depthmse2,variance2,'-*')
+plot(depthmse3,variance3,'-s')
+legend('exploration first', 'exploitation first', 'randomized')
 xlabel('sum of absolute difference from target depth')
-ylabel('sum of \theta posterior entropy')
+ylabel('\theta posterior entropy after last iteration')
 hold off
-%
-figure;
-subplot(1,2,1)
-plot(0:0.1:1, depthmse, 'o')
-xlabel('\epsilon')
-ylabel('sum of absolute difference from target depth')
-subplot(1,2,2)
-plot(0:0.1:1, variance, 'o')
-xlabel('\epsilon')
-ylabel('sum of \theta posterior entropy')
 
 %% step function
 figure;
@@ -170,26 +209,6 @@ legend('target depth change', 'compaction history')
 hold off
 %%
 % compute ABC
-function Posterior_distribution = ABC_Method_old(observed_data, threshold, action, prior, forward_NN)
-    distance_function = @(x,y) mean(abs(x-y),2);
-    Posterior_distribution = [];
-    for i = 1:length(prior)
-        ys = prior(i,1);
-        E1 = prior(i,2);
-        E2 = prior(i,3);
-        % generate the sim data 
-        X = predict(forward_NN, [action,ys,E1,E2]);
-        % calcalute the distance from Y 
-        distance = distance_function(X,observed_data);
-        %disp('X:');disp(X);
-        %disp('observed:');disp(observed_data);
-        %disp(distance);
-        if distance < threshold
-            fprintf('ys: %4.4f, E1: %4.4f, E2: %4.4f\n',ys,E1,E2);
-            Posterior_distribution = [Posterior_distribution; ys,E1,E2];
-        end
-    end
-end
 
 function Posterior_distribution = ABC_Method(observed_data, threshold, action, prior, forward_NN)
     distance_function = @(x,y) mean(abs(x-y),2);
@@ -217,27 +236,94 @@ function response = comsol_response(comsol_model, action)
     response = mphevalpoint(comsol_model,'v','selection',8,'dataset','dset9','t',[1.5,3]);
 end
 
-function action = eGreedy_old(iter, n, epsilon,theta_prior, l_high, l_low, backward_NN, d_target)
-    if rand < epsilon
-    %if iter < n*epsilon
-        action = rand*(l_high-l_low) + l_low;
-        action = round(action,2);
+
+
+function action = eGreedy_explore_first(iter, n, epsilon, theta_prior, actions, expected_depths, observed_depths, forward_NN, d_target)
+    global explored_actions;
+    %if rand < epsilon
+    if iter <= n*epsilon
+    %if iter > (1-epsilon)*n
+        posterior_variance = inf*ones(1,length(actions));
+
+        for i = 1:length(actions)
+            %explored = 0;
+            %for j = 1:length(explored_actions)
+            %    if actions(i) == explored_actions(j)
+            %        explored = 1;
+            %    end
+            %end
+            %if explored == 1
+            %    continue;
+            %end
+            action_tmp = actions(i);
+            if observed_depths(2,i) == 0  % not observed before
+                depth = expected_depths(:,i);
+            else
+                depth = observed_depths(:,i);
+            end
+            threshold = 0.005;
+            posterior = ABC_Method(depth', threshold, action_tmp, theta_prior, forward_NN);
+            entropy = entropy_calculation(posterior);
+            fprintf('i=%d, posterior entropy: %4.4f\n',i,entropy);
+            posterior_variance(i) = entropy;
+        end
+        action = actions(posterior_variance==min(posterior_variance));
+        action = action(1); % in case there are two optimal actions
         fprintf('random action: %4.4f\n',action);
+        explored_actions = [explored_actions action];
     else
-        input_vector = [theta_prior, d_target*ones(length(theta_prior),1)];
-        actions = predict(backward_NN,input_vector);
-        % filter by range
-        actions = actions(actions<=2 & actions>=1.6);
-        action = mean(actions,1);
-        action = round(action,2);
+        abs_target = abs(expected_depths(2,:)-d_target);
+        action = actions(abs_target == min(abs_target));
+        action = action(1); % in case there are two optimal actions
         fprintf('best action: %4.4f\n',action);
     end
 end
 
-function action = eGreedy(iter, n, epsilon, theta_prior, actions, expected_depths, observed_depths, forward_NN, d_target)
+function action = eGreedy_exploit_first(iter, n, epsilon, theta_prior, actions, expected_depths, observed_depths, forward_NN, d_target)
     global explored_actions;
     %if rand < epsilon
-    if iter <= n*epsilon
+    %if iter <= n*epsilon
+    if iter > (1-epsilon)*n
+        posterior_variance = inf*ones(1,length(actions));
+
+        for i = 1:length(actions)
+            %explored = 0;
+            %for j = 1:length(explored_actions)
+            %    if actions(i) == explored_actions(j)
+            %        explored = 1;
+            %    end
+            %end
+            %if explored == 1
+            %    continue;
+            %end
+            action_tmp = actions(i);
+            if observed_depths(2,i) == 0  % not observed before
+                depth = expected_depths(:,i);
+            else
+                depth = observed_depths(:,i);
+            end
+            threshold = 0.005;
+            posterior = ABC_Method(depth', threshold, action_tmp, theta_prior, forward_NN);
+            entropy = entropy_calculation(posterior);
+            fprintf('i=%d, posterior entropy: %4.4f\n',i,entropy);
+            posterior_variance(i) = entropy;
+        end
+        action = actions(posterior_variance==min(posterior_variance));
+        action = action(1); % in case there are two optimal actions
+        fprintf('random action: %4.4f\n',action);
+        explored_actions = [explored_actions action];
+    else
+        abs_target = abs(expected_depths(2,:)-d_target);
+        action = actions(abs_target == min(abs_target));
+        action = action(1); % in case there are two optimal actions
+        fprintf('best action: %4.4f\n',action);
+    end
+end
+
+function action = eGreedy_random(iter, n, epsilon, theta_prior, actions, expected_depths, observed_depths, forward_NN, d_target)
+    global explored_actions;
+    if rand < epsilon
+    %if iter <= n*epsilon
     %if iter > (1-epsilon)*n
         posterior_variance = inf*ones(1,length(actions));
 

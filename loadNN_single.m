@@ -34,24 +34,27 @@ yield_low = 0.1;
 yield_high = 1.3;
 
 % assume a uniform prior on parameters, generate prior
-sample_size = 10000;
-randm = rand(sample_size,3);
-randm(:,1) = randm(:,1)*(yield_high-yield_low) + yield_low;
-randm(:,2) = randm(:,2)*(E1_high-E1_low) + E1_low;
-randm(:,3) = randm(:,3)*(E2_high-E2_low) + E2_low;
-theta_prior = [];
-for i = 1:sample_size
-    if randm(i,2) > randm(i,3)
-        theta_prior = [theta_prior;randm(i,:)];
-    end
-end
+%sample_size = 10000;
+%randm = rand(sample_size,3);
+%randm(:,1) = randm(:,1)*(yield_high-yield_low) + yield_low;
+%randm(:,2) = randm(:,2)*(E1_high-E1_low) + E1_low;
+%randm(:,3) = randm(:,3)*(E2_high-E2_low) + E2_low;
+%theta_prior = [];
+%for i = 1:sample_size
+%    if randm(i,2) > randm(i,3)
+%        theta_prior = [theta_prior;randm(i,:)];
+%    end
+%end
+load('prior_samples.mat')
 disp(length(theta_prior))
 
 figure;
 subplot(3,1,1);
 hist(theta_prior(:,1));
+%yticklabels(round(yticks/sum(theta_prior(:,1)),4))
 xlim([yield_low yield_high])
 ylabel('\sigma_{yield}')
+%title('\sigma_{yield}')
 subplot(3,1,2);
 hist(theta_prior(:,2));
 xlim([E1_low E1_high])
@@ -116,14 +119,17 @@ for jj = 1:length(epsilon_array)
         subplot(3,1,1);
         hist(theta_posterior(:,1),yield_low+0.05:0.1:yield_high-0.05);
         %xlim([yield_low yield_high])
+        yticklabels(round(yticks/length(theta_posterior(:,1)),2))
         ylabel('\sigma_{yield}')
         subplot(3,1,2);
         hist(theta_posterior(:,2),E1_low+0.1:0.2:E1_high-0.1);
         %xlim([E1_low E1_high])
+        yticklabels(round(yticks/length(theta_posterior(:,2)),2))
         ylabel('E_e')
         subplot(3,1,3);
         hist(theta_posterior(:,3),E2_low+0.1:0.2:E2_high-0.1);
         %xlim([E2_low E2_high])
+        yticklabels(round(yticks/length(theta_posterior(:,3)),2))
         ylabel('E_{Tiso}')
     end
 end
@@ -137,9 +143,10 @@ for i = 1:size(response_array,1)
     fprintf('total reward: %4.8f\n',depthmse(i))
 end
 
-% step function
+%% step function
 figure;
 hold on
+subplot(2,1,2)
 %stairs(1:50, 0.03*ones(1,50))
 X = linspace(1,n_trials+1,n_trials+1)';
 Y = [-0.03*ones(n_trials+1,1), [response_array(1,:),response_array(end)]'];
@@ -148,19 +155,16 @@ ylabel('depth change (m)')
 xlim([1,n_trials+1]);
 ylim([-0.06, 0]);
 legend('target depth change', 'compaction history')
-hold off
-
-figure;
-hold on
+subplot(2,1,1)
 %stairs(1:50, 0.03*ones(1,50))
 X = linspace(1,n_trials+1,n_trials+1)';
 Y = [action_history(1,:),action_history(end)]';
 h = stairs(X,Y);
-ylabel('Loading Pressure (MPa)')
+ylabel('loading pressure (MPa)')
 xlim([1,n_trials+1]);
 ylim([1, 3]);
 hold off
-%
+%%
 % compute ABC
 function Posterior_distribution = ABC_Method_old(observed_data, threshold, action, prior, forward_NN)
     distance_function = @(x,y) mean(abs(x-y),2);
